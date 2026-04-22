@@ -1,65 +1,186 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect } from 'react';
+import { db, auth } from '../firebaseConfig';
+import { collection, getDocs, query, orderBy, doc, updateDoc, where } from 'firebase/firestore';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 
-export default function Home() {
+const getSemanaId = () => {
+  const agora = new Date();
+  const primeiroDiaAno = new Date(agora.getFullYear(), 0, 1);
+  const dias = Math.floor((agora.getTime() - primeiroDiaAno.getTime()) / 86400000);
+  const semana = Math.ceil((dias + primeiroDiaAno.getDay() + 1) / 7);
+  return `${agora.getFullYear()}-W${semana}`; 
+};
+
+export default function Dashboard() {
+  const [pacientes, setPacientes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPaciente, setSelectedPaciente] = useState<any>(null);
+  const [historico, setHistorico] = useState<any[]>([]);
+  const router = useRouter();
+  const semanaAtual = getSemanaId();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) router.push('/login');
+      else fetchPacientes();
+    });
+    return () => unsub();
+  }, []);
+
+  const fetchPacientes = async () => {
+    setLoading(true);
+    try {
+      const q = query(
+      collection(db, "pacientes"), 
+      where("emailVerificado", "==", true), // Só traz quem verificou
+      orderBy("nome", "asc")
+    );
+      const snap = await getDocs(q);
+      const lista = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        respondido_hoje: d.data().ultima_semana_respondida === semanaAtual 
+      }));
+      setPacientes(lista);
+    } catch (e) { console.error("Erro ao buscar pacientes:",e); } finally { setLoading(false); }
+  };
+
+  const verDetalhes = async (paciente: any) => {
+    setSelectedPaciente(paciente);
+    try {
+      const q = query(collection(db, "pacientes", paciente.id, "checkins"), orderBy("data_envio", "desc"));
+      const snap = await getDocs(q);
+      setHistorico(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (error) { console.error(error); }
+  };
+
+  const toggleConquista = async (pacienteId: string, campo: string, valorAtual: boolean) => {
+    try {
+      await updateDoc(doc(db, "pacientes", pacienteId), { [campo]: !valorAtual });
+      setPacientes(prev => prev.map(p => p.id === pacienteId ? { ...p, [campo]: !valorAtual } : p));
+    } catch (e) { console.error(e); }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-[#F0F7F5] p-10 font-sans">
+      <header className="max-w-7xl mx-auto mb-10 flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-black text-[#00392D]">Dashboard Gabs 🌿</h1>
+          <p className="text-teal-600 font-bold uppercase text-xs tracking-widest">Semana: {semanaAtual}</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <button onClick={() => signOut(auth)} className="text-xs font-bold text-red-400 hover:text-red-600 uppercase">Sair do Painel</button>
+      </header>
+
+      {loading ? (
+        <div className="flex justify-center p-20"><p className="text-[#00392D] font-bold">Carregando pacientes...</p></div>
+      ) : (
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+          {pacientes.map(p => (
+            <div key={p.id} className={`bg-white p-6 rounded-[35px] border-2 transition-all ${p.respondido_hoje ? 'border-green-200 shadow-lg' : 'border-transparent opacity-80'}`}>
+              <div className="flex justify-between mb-4">
+                 <div className="relative">
+                    <img src={p.avatar} className="w-12 h-12 rounded-full bg-gray-100 border-2 border-teal-100 object-cover" />
+                    <span className={`absolute -top-1 -right-1 text-[8px] font-black px-1.5 py-0.5 rounded-md text-white ${p.genero === 'F' ? 'bg-pink-400' : 'bg-blue-400'}`}>
+                      {p.genero || '?'}
+                    </span>
+                 </div>
+                 {/* BOTÃO DE STATUS MELHORADO */}
+                 <span className={`flex items-center text-[9px] font-black px-3 rounded-xl shadow-sm border ${p.respondido_hoje ? 'bg-green-500 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}>
+                    {p.respondido_hoje ? '✓ RESPONDIDO' : '○ PENDENTE'}
+                  </span>
+              </div>
+              <h3 className="text-lg font-bold text-gray-800">{p.nome}</h3>
+              <p className="text-[10px] text-gray-400 mb-4">{p.username}</p>
+              
+              <div className="flex gap-2 my-4">
+                  <button onClick={() => toggleConquista(p.id, 'conquista_estrela', p.conquista_estrela)} className={`flex-1 py-2 rounded-xl text-[9px] font-black transition-all ${p.conquista_estrela ? 'bg-yellow-400 text-white shadow-md' : 'bg-gray-50 text-gray-300'}`}>⭐ ESTRELA</button>
+                  <button onClick={() => toggleConquista(p.id, 'conquista_coracao', p.conquista_coracao)} className={`flex-1 py-2 rounded-xl text-[9px] font-black transition-all ${p.conquista_coracao ? 'bg-red-400 text-white shadow-md' : 'bg-gray-50 text-gray-300'}`}>❤️ FOCO</button>
+              </div>
+              <button onClick={() => verDetalhes(p)} className="w-full bg-[#00392D] text-white py-4 rounded-2xl font-bold text-sm hover:bg-[#002b22] transition-colors">Analisar Respostas</button>
+            </div>
+          ))}
         </div>
-      </main>
-    </div>
+      )}
+
+      {selectedPaciente && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-[40px] overflow-hidden flex flex-col">
+            <div className="p-6 border-b flex justify-between items-center bg-white">
+              <h2 className="text-xl font-black text-[#00392D]">Histórico: {selectedPaciente.nome}</h2>
+              <button onClick={() => setSelectedPaciente(null)} className="text-gray-400 text-2xl">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-gray-50">
+              {historico.length === 0 ? (
+                <div className="text-center py-20 text-gray-400 font-bold">Nenhum check-in enviado ainda.</div>
+              ) : (
+                historico.map((c) => (
+                  /* CARD INTERNO DO HISTÓRICO MELHORADO */
+                  <div key={c.id} className="bg-white rounded-[30px] p-8 shadow-sm border border-teal-50 flex flex-col lg:flex-row gap-8">
+                    <div className="lg:w-48">
+                      <p className="text-[10px] font-black text-teal-600 uppercase mb-3">Foto da Semana</p>
+                      {c.foto_livre ? (
+                        <img src={c.foto_livre} className="w-full aspect-square object-cover rounded-2xl shadow-md border-4 border-white" alt="Evolução" />
+                      ) : (
+                        <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-200">
+                          <p className="text-gray-400 text-[10px] font-bold">Sem foto</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start mb-6">
+                        <span className="bg-teal-50 text-teal-700 px-4 py-1 rounded-full text-[10px] font-black uppercase">Semana: {c.semana}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-teal-50/50 p-4 rounded-2xl border border-white">
+                          <p className="text-[8px] text-teal-600 font-bold uppercase">Nota Dieta</p>
+                          <p className="text-xl font-black text-[#00392D]">{c.nota_alimento}/10</p>
+                        </div>
+                        <div className="bg-teal-50/50 p-4 rounded-2xl border border-white">
+                          <p className="text-[8px] text-teal-600 font-bold uppercase">Água Diária</p>
+                          <p className="text-xl font-black text-[#00392D]">{c.agua_litros}L</p>
+                        </div>
+                        <div className="bg-teal-50/50 p-4 rounded-2xl border border-white">
+                          <p className="text-[8px] text-teal-600 font-bold uppercase">Treinos</p>
+                          <p className="text-xl font-black text-[#00392D]">{c.dias_treino}d</p>
+                        </div>
+                        <div className="bg-teal-50/50 p-4 rounded-2xl border border-white">
+                          <p className="text-[8px] text-teal-600 font-bold uppercase">No Plano</p>
+                          <p className="text-xl font-black text-[#00392D]">{c.dias_plano}d</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* mb-8 garante o gap para baixo */}
+                      <div className="bg-red-50/50 p-4 rounded-2xl border border-red-50">
+                        <p className="text-[9px] font-black text-red-500 uppercase mb-1">Furo no plano:</p>
+                        <p className="text-sm text-gray-700">{c.furo_plano || 'Nenhum'}</p>
+                      </div>
+                      <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-50 mt-20">
+                        <p className="text-[9px] font-black text-blue-500 uppercase mb-1">Humor & Energia:</p>
+                        <p className="text-sm text-gray-700">{c.humor || 'Ok'} / {c.energia || 'Média'}</p>
+                      </div>
+                    </div>
+
+                      <div className="mt-4 bg-[#00392D] p-6 rounded-[30px] shadow-lg border-t-4 border-teal-500">
+                        <p className="text-teal-400 text-[10px] font-black uppercase mb-3 tracking-widest">
+                          Mensagem para Gabs:
+                        </p>
+                        <p className="text-white text-sm italic leading-relaxed">
+                          "{c.extra || 'O paciente não deixou recado...'}"
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
