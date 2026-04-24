@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { db, auth } from '../firebaseConfig';
-import { collection, getDocs, query, orderBy, doc, updateDoc, where } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig'; // Ajuste o caminho
+import { collection, getDocs, query, orderBy, doc, updateDoc, where, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
@@ -22,9 +22,25 @@ export default function Dashboard() {
   const semanaAtual = getSemanaId();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (!user) router.push('/login');
-      else fetchPacientes();
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.replace('/login');
+      } else {
+        // Verificação de segurança: O usuário logado é admin no banco?
+        try {
+          const adminRef = doc(db, "Adm", user.email?.toLowerCase() || "");
+          const adminSnap = await getDoc(adminRef);
+          
+          if (adminSnap.exists() && adminSnap.data().role === 'admin') {
+            fetchPacientes();
+          } else {
+            await signOut(auth);
+            router.replace('/login');
+          }
+        } catch (e) {
+          router.replace('/login');
+        }
+      }
     });
     return () => unsub();
   }, []);
@@ -33,10 +49,10 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const q = query(
-      collection(db, "pacientes"), 
-      where("emailVerificado", "==", true), // Só traz quem verificou
-      orderBy("nome", "asc")
-    );
+        collection(db, "pacientes"), 
+        where("emailVerificado", "==", true),
+        orderBy("nome", "asc")
+      );
       const snap = await getDocs(q);
       const lista = snap.docs.map(d => ({
         id: d.id,
@@ -44,7 +60,11 @@ export default function Dashboard() {
         respondido_hoje: d.data().ultima_semana_respondida === semanaAtual 
       }));
       setPacientes(lista);
-    } catch (e) { console.error("Erro ao buscar pacientes:",e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.error("Erro ao buscar pacientes:", e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const verDetalhes = async (paciente: any) => {
@@ -63,8 +83,10 @@ export default function Dashboard() {
     } catch (e) { console.error(e); }
   };
 
+  if (loading) return <div className="min-h-screen bg-[#F0F7F5] flex items-center justify-center font-bold text-[#00392D]">Carregando Painel...</div>;
+
   return (
-    <main className="min-h-screen bg-[#F0F7F5] p-10 font-sans">
+    <main className="min-h-screen bg-[#F0F7F5] p-10 font-sans text-black">
       <header className="max-w-7xl mx-auto mb-10 flex justify-between items-end">
         <div>
           <h1 className="text-4xl font-black text-[#00392D]">Dashboard Gabs 🌿</h1>
@@ -73,36 +95,26 @@ export default function Dashboard() {
         <button onClick={() => signOut(auth)} className="text-xs font-bold text-red-400 hover:text-red-600 uppercase">Sair do Painel</button>
       </header>
 
-      {loading ? (
-        <div className="flex justify-center p-20"><p className="text-[#00392D] font-bold">Carregando pacientes...</p></div>
-      ) : (
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-          {pacientes.map(p => (
-            <div key={p.id} className={`bg-white p-6 rounded-[35px] border-2 transition-all ${p.respondido_hoje ? 'border-green-200 shadow-lg' : 'border-transparent opacity-80'}`}>
-              <div className="flex justify-between mb-4">
-                 <div className="relative">
-                    <img src={p.avatar} className="w-12 h-12 rounded-full bg-gray-100 border-2 border-teal-100 object-cover" />
-                    <span className={`absolute -top-1 -right-1 text-[8px] font-black px-1.5 py-0.5 rounded-md text-white ${p.genero === 'F' ? 'bg-pink-400' : 'bg-blue-400'}`}>
-                      {p.genero || '?'}
-                    </span>
-                 </div>
-                 {/* BOTÃO DE STATUS MELHORADO */}
-                 <span className={`flex items-center text-[9px] font-black px-3 rounded-xl shadow-sm border ${p.respondido_hoje ? 'bg-green-500 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}>
-                    {p.respondido_hoje ? '✓ RESPONDIDO' : '○ PENDENTE'}
-                  </span>
-              </div>
-              <h3 className="text-lg font-bold text-gray-800">{p.nome}</h3>
-              <p className="text-[10px] text-gray-400 mb-4">{p.username}</p>
-              
-              <div className="flex gap-2 my-4">
-                  <button onClick={() => toggleConquista(p.id, 'conquista_estrela', p.conquista_estrela)} className={`flex-1 py-2 rounded-xl text-[9px] font-black transition-all ${p.conquista_estrela ? 'bg-yellow-400 text-white shadow-md' : 'bg-gray-50 text-gray-300'}`}>⭐ ESTRELA</button>
-                  <button onClick={() => toggleConquista(p.id, 'conquista_coracao', p.conquista_coracao)} className={`flex-1 py-2 rounded-xl text-[9px] font-black transition-all ${p.conquista_coracao ? 'bg-red-400 text-white shadow-md' : 'bg-gray-50 text-gray-300'}`}>❤️ FOCO</button>
-              </div>
-              <button onClick={() => verDetalhes(p)} className="w-full bg-[#00392D] text-white py-4 rounded-2xl font-bold text-sm hover:bg-[#002b22] transition-colors">Analisar Respostas</button>
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+        {pacientes.map(p => (
+          <div key={p.id} className={`bg-white p-6 rounded-[35px] border-2 transition-all ${p.respondido_hoje ? 'border-green-200 shadow-lg' : 'border-transparent opacity-80'}`}>
+            <div className="flex justify-between mb-4">
+              <img src={p.avatar} className="w-12 h-12 rounded-full bg-gray-100 border-2 border-teal-100 object-cover" />
+              <span className={`flex items-center text-[9px] font-black px-3 rounded-xl shadow-sm border ${p.respondido_hoje ? 'bg-green-500 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}>
+                {p.respondido_hoje ? '✓ RESPONDIDO' : '○ PENDENTE'}
+              </span>
             </div>
-          ))}
-        </div>
-      )}
+            <h3 className="text-lg font-bold text-gray-800">{p.nome}</h3>
+            <p className="text-[10px] text-gray-400 mb-4">@{p.username}</p>
+            
+            <div className="flex gap-2 my-4">
+              <button onClick={() => toggleConquista(p.id, 'conquista_estrela', p.conquista_estrela)} className={`flex-1 py-2 rounded-xl text-[9px] font-black transition-all ${p.conquista_estrela ? 'bg-yellow-400 text-white shadow-md' : 'bg-gray-50 text-gray-300'}`}>⭐ ESTRELA</button>
+              <button onClick={() => toggleConquista(p.id, 'conquista_coracao', p.conquista_coracao)} className={`flex-1 py-2 rounded-xl text-[9px] font-black transition-all ${p.conquista_coracao ? 'bg-red-400 text-white shadow-md' : 'bg-gray-50 text-gray-300'}`}>❤️ FOCO</button>
+            </div>
+            <button onClick={() => verDetalhes(p)} className="w-full bg-[#00392D] text-white py-4 rounded-2xl font-bold text-sm hover:bg-[#002b22] transition-colors">Analisar Respostas</button>
+          </div>
+        ))}
+      </div>
 
       {selectedPaciente && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50">
@@ -111,30 +123,24 @@ export default function Dashboard() {
               <h2 className="text-xl font-black text-[#00392D]">Histórico: {selectedPaciente.nome}</h2>
               <button onClick={() => setSelectedPaciente(null)} className="text-gray-400 text-2xl">✕</button>
             </div>
-
             <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-gray-50">
               {historico.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 font-bold">Nenhum check-in enviado ainda.</div>
               ) : (
                 historico.map((c) => (
-                  /* CARD INTERNO DO HISTÓRICO MELHORADO */
                   <div key={c.id} className="bg-white rounded-[30px] p-8 shadow-sm border border-teal-50 flex flex-col lg:flex-row gap-8">
                     <div className="lg:w-48">
                       <p className="text-[10px] font-black text-teal-600 uppercase mb-3">Foto da Semana</p>
                       {c.foto_livre ? (
-                        <img src={c.foto_livre} className="w-full aspect-square object-cover rounded-2xl shadow-md border-4 border-white" alt="Evolução" />
+                        <img src={c.foto_livre} className="w-full aspect-square object-cover rounded-2xl shadow-md border-4 border-white" />
                       ) : (
                         <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-200">
                           <p className="text-gray-400 text-[10px] font-bold">Sem foto</p>
                         </div>
                       )}
                     </div>
-                    
                     <div className="flex-1">
-                      <div className="flex justify-between items-start mb-6">
-                        <span className="bg-teal-50 text-teal-700 px-4 py-1 rounded-full text-[10px] font-black uppercase">Semana: {c.semana}</span>
-                      </div>
-
+                      <span className="bg-teal-50 text-teal-700 px-4 py-1 rounded-full text-[10px] font-black uppercase inline-block mb-4">Semana: {c.semana}</span>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                         <div className="bg-teal-50/50 p-4 rounded-2xl border border-white">
                           <p className="text-[8px] text-teal-600 font-bold uppercase">Nota Dieta</p>
@@ -153,25 +159,19 @@ export default function Dashboard() {
                           <p className="text-xl font-black text-[#00392D]">{c.dias_plano}d</p>
                         </div>
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* mb-8 garante o gap para baixo */}
-                      <div className="bg-red-50/50 p-4 rounded-2xl border border-red-50">
-                        <p className="text-[9px] font-black text-red-500 uppercase mb-1">Furo no plano:</p>
-                        <p className="text-sm text-gray-700">{c.furo_plano || 'Nenhum'}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div className="bg-red-50/50 p-4 rounded-2xl border border-red-50">
+                          <p className="text-[9px] font-black text-red-500 uppercase">Furo no plano:</p>
+                          <p className="text-sm">{c.furo_plano || 'Nenhum'}</p>
+                        </div>
+                        <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-50">
+                          <p className="text-[9px] font-black text-blue-500 uppercase">Humor & Energia:</p>
+                          <p className="text-sm">{c.humor || 'Ok'} / {c.energia || 'Média'}</p>
+                        </div>
                       </div>
-                      <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-50 mt-20">
-                        <p className="text-[9px] font-black text-blue-500 uppercase mb-1">Humor & Energia:</p>
-                        <p className="text-sm text-gray-700">{c.humor || 'Ok'} / {c.energia || 'Média'}</p>
-                      </div>
-                    </div>
-
-                      <div className="mt-4 bg-[#00392D] p-6 rounded-[30px] shadow-lg border-t-4 border-teal-500">
-                        <p className="text-teal-400 text-[10px] font-black uppercase mb-3 tracking-widest">
-                          Mensagem para Gabs:
-                        </p>
-                        <p className="text-white text-sm italic leading-relaxed">
-                          "{c.extra || 'O paciente não deixou recado...'}"
-                        </p>
+                      <div className="bg-[#00392D] p-6 rounded-[30px] shadow-lg">
+                        <p className="text-teal-400 text-[10px] font-black uppercase mb-1">Mensagem do Paciente:</p>
+                        <p className="text-white text-sm italic">"{c.extra || 'Sem recado...'}"</p>
                       </div>
                     </div>
                   </div>
