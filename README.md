@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Panel Nutricionista — Checkin Gabs
 
-## Getting Started
+[![My Skills](https://skillicons.dev/icons?i=nextjs,react,ts,tailwind,firebase)](https://skillicons.dev)
 
-First, run the development server:
+Panel administrativo web para que profesionales de nutrición monitoricen el progreso semanal de sus pacientes, como contraparte del lado clínico de la app móvil **[Checkin Gabs](https://github.com/kelloggs22/app-paciente)**.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Descripción
+Centraliza en un solo panel los datos de seguimiento (medidas, hábitos, evolución) que los pacientes registran desde la app móvil, para que el nutricionista pueda dar seguimiento sin revisar caso por caso manualmente.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠 Tecnologías utilizadas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework:** [Next.js](https://nextjs.org/) (App Router)
+- **Lenguaje:** [TypeScript](https://www.typescriptlang.org/)
+- **UI:** [React](https://react.dev/) + [Tailwind CSS](https://tailwindcss.com/)
+- **Backend/datos:** [Firebase](https://firebase.google.com/) — misma base de datos que consume la app de pacientes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ⚙️ Configuración e instalación
 
-## Learn More
+1. Clona el repositorio:
+   ```bash
+   git clone https://github.com/kelloggs22/gabs-dashboard.git
+   cd gabs-dashboard
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. Instala las dependencias:
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. Arranca el entorno de desarrollo:
+   ```bash
+   npm run dev
+   ```
+   Abre [http://localhost:3000](http://localhost:3000) en el navegador.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 👩‍💻 Mi rol
+Diseño y desarrollo del panel en Next.js/TypeScript, integrando la lectura en tiempo real de Firebase para reflejar el progreso que los pacientes registran en la app móvil.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📸 Capturas
+_(pendiente: añadir 2-3 capturas del panel)_
